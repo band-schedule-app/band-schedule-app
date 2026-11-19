@@ -270,6 +270,7 @@ with tab1:
             filter_band = st.selectbox("バンドでハイライト表示", ["すべて表示"] + band_names)
             df = schedule_df.copy()
             df["表示用"] = df["担当バンド"].apply(lambda x: f"★ {x}" if (x == filter_band or x == f"{filter_band}(過半数)") else ("・" if x != "ー" else "ー")) if filter_band != "すべて表示" else df["担当バンド"]
+            df = df.drop_duplicates(subset=["曜日", "コマ"], keep="last")
             cal_df = df.pivot(index="コマ", columns="曜日", values="表示用").reindex(index=PERIODS, columns=ACTIVE_DAYS).rename(columns=DAY_LABELS)
             st.dataframe(cal_df, use_container_width=True)
             st.download_button(label="🖼️ このスケジュール表を画像（PNG）で保存", data=create_schedule_image(cal_df, f"バンド練習スケジュール（{WEEK_RANGE_STR}）"), file_name=f"band_schedule_{effective_start.strftime('%m%d')}.png", mime="image/png", use_container_width=True)
