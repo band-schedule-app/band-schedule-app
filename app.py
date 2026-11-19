@@ -34,6 +34,7 @@ def get_spreadsheet():
     client = gspread.authorize(creds)
     return client.open_by_url(sheet_url)
 
+@st.cache_data(ttl=60)
 def load_all_data():
     sh = get_spreadsheet()
     today = date.today()
@@ -173,6 +174,9 @@ if "admin_unlocked" not in st.session_state:
     st.session_state["admin_unlocked"] = False
 
 st.title("バンド練習スケジュール")
+if st.button("🔄 最新データに更新（他の人の投票を反映）", use_container_width=True):
+    load_all_data.clear()
+    st.rerun()
 
 DAYS = ["月曜", "火曜", "水曜", "木曜", "金曜", "土曜"]
 SHORT_DAYS = ["月", "火", "水", "木", "金", "土"]
