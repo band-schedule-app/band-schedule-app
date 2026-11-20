@@ -366,7 +366,7 @@ def is_consecutive_for_band(band, day, p_idx, assigned_map, band_status):
 
 
 tab1, tab2, tab3, tab4 = st.tabs([
-    "📅 シフト作成",
+    "📅 スケジュール",
     "🗳️ 個人投票",
     "🎸 バンド管理",
     "⚙️ 管理者",
