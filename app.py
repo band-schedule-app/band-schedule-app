@@ -259,23 +259,24 @@ def create_schedule_image(cal_df, title_text):
         if jp_font:
             cell.get_text().set_fontproperties(jp_font)
         if r == 0:
-            cell.set_facecolor("#2B4C7E")
+            cell.set_facecolor("#1E1B18")
             cell.get_text().set_color("white")
             cell.get_text().set_weight("bold")
         elif c == -1:
-            cell.set_facecolor("#EBF1F8")
+            cell.set_facecolor("#2A2420")
+            cell.get_text().set_color("#E8C47C")
             cell.get_text().set_weight("bold")
         else:
             txt = cell.get_text().get_text()
             if txt in ("ー", "・", ""):
-                cell.set_facecolor("#F9FAFB")
-                cell.get_text().set_color("#888888")
+                cell.set_facecolor("#171619")
+                cell.get_text().set_color("#6E6A63")
             elif "(過半数)" in txt:
-                cell.set_facecolor("#FFF8E1")
-                cell.get_text().set_color("#7A5200")
+                cell.set_facecolor("#2E2318")
+                cell.get_text().set_color("#E5B567")
             else:
-                cell.set_facecolor("#E8F5E9")
-                cell.get_text().set_color("#1B5E20")
+                cell.set_facecolor("#1C2822")
+                cell.get_text().set_color("#A7D7B8")
                 cell.get_text().set_weight("bold")
 
     buf = io.BytesIO()
@@ -327,6 +328,39 @@ DAY_LABELS = {
 }
 EVENT_RANGE_STR = f"{event_start.strftime('%-m/%-d')}〜{event_end.strftime('%-m/%-d')}"
 WEEK_RANGE_STR = f"{effective_start.strftime('%-m/%-d')}〜{w_end.strftime('%-m/%-d')}"
+
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background: radial-gradient(circle at top right, #231D1A 0%, #121214 55%, #0D0E12 100%);
+        color: #F3EFE6;
+    }
+    h1, h2, h3 {
+        letter-spacing: 0.04em;
+        color: #F5E6C8;
+    }
+    .stButton > button, .stDownloadButton > button, .stFormSubmitButton > button {
+        background-color: #241F1C;
+        color: #F3EFE6;
+        border: 1px solid rgba(212, 163, 89, 0.45);
+        border-radius: 8px;
+        transition: all 0.2s ease;
+    }
+    .stButton > button:hover, .stDownloadButton > button:hover, .stFormSubmitButton > button:hover {
+        background-color: #D4A359;
+        color: #141210;
+        border-color: #D4A359;
+    }
+    div[data-testid="stExpander"] {
+        background-color: rgba(29, 28, 33, 0.75);
+        border: 1px solid rgba(212, 163, 89, 0.22);
+        border-radius: 8px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 st.title("バンド練習スケジュール")
 st.caption(
