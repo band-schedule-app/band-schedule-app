@@ -208,14 +208,21 @@ def save_schedule(schedule_records):
 def get_japanese_font():
     candidates = [
         "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+        "/System/Library/Fonts/ヒラギノ角ゴシック W6.ttc",
         "/System/Library/Fonts/Hiragino Sans GB.ttc",
+        "/System/Library/Fonts/AppleSDGothicNeo.ttc",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/truetype/fonts-japanese-gothic.ttf",
+        "/usr/share/fonts/truetype/takao-gothic/TakaoPGothic.ttf",
     ]
-    for path in candidates:
-        if os.path.exists(path):
-            return font_manager.FontProperties(fname=path)
+    for p in candidates:
+        if os.path.exists(p):
+            return font_manager.FontProperties(fname=p)
+    for f in font_manager.fontManager.ttflist:
+        if any(k in f.name.lower() for k in ["noto", "hiragino", "gothic", "cjk", "jp"]):
+            return font_manager.FontProperties(fname=f.fname)
     return None
 
 
