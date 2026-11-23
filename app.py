@@ -330,6 +330,22 @@ WEEK_RANGE_STR = f"{effective_start.strftime('%-m/%-d')}〜{w_end.strftime('%-m/
 
 if "band_select_key" not in st.session_state:
     st.session_state["band_select_key"] = 0
+
+def _band_slot_status(b_votes, total_m, slot):
+    rep_full = b_votes.get("__BAND_FULL__", [])
+    rep_part = b_votes.get("__BAND_PARTIAL__", [])
+    if not isinstance(rep_full, list):
+        rep_full = [s.strip() for s in str(rep_full).split(",") if s.strip()]
+    if not isinstance(rep_part, list):
+        rep_part = [s.strip() for s in str(rep_part).split(",") if s.strip()]
+    attended = sum(
+        1 for m, slots in b_votes.items()
+        if m not in ("__BAND_FULL__", "__BAND_PARTIAL__") and slot in slots
+    )
+    is_full = (total_m > 0 and attended >= total_m) or (slot in rep_full)
+    is_partial = (not is_full) and ((total_m > 0 and attended > total_m / 2) or (slot in rep_part))
+    return is_full, is_partial
+
 st.title("バンド練習スケジュール")
 st.caption(
     f"🎪 イベント：**{event_name}** ｜ 🗓️ コマ取り期間：{EVENT_RANGE_STR} ｜ "
@@ -527,7 +543,7 @@ with tab2:
         else:
             total_members = bands_dict[selected_band]
             b_votes = member_votes.get(selected_band, {})
-            voted_members = list(b_votes.keys())
+            voted_members = [m for m in b_votes.keys() if m not in ("__BAND_FULL__", "__BAND_PARTIAL__")]
             st.info(
                 f"📊 **【{selected_band}】の投票状況：{len(voted_members)} / {total_members}人 完了**\n\n"
                 f"投票済み：{', '.join(voted_members) if voted_members else 'まだいません'}"
