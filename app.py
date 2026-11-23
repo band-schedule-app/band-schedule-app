@@ -184,8 +184,7 @@ def save_bands_and_stats(bands, total_stats):
     load_all_data.clear()
 
 
-def save_votes(member_votes)
-                        st.session_state["band_select_key"] = st.session_state.get("band_select_key", 0) + 1:
+def save_votes(member_votes):
     ws = get_worksheets()["votes"]
     rows = [["band_name", "member_name", "slots"]]
     for b_name, m_dict in member_votes.items():
@@ -369,7 +368,7 @@ def is_consecutive_for_band(band, day, p_idx, assigned_map, band_status):
 
 
 tab1, tab2, tab3, tab4 = st.tabs([
-    "📅 スケジュール",
+    "📅 シフト作成",
     "🗳️ 個人投票",
     "🎸 バンド管理",
     "⚙️ 管理者",
@@ -380,11 +379,79 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # ==========================================
 with tab1:
     st.subheader(f"第{round_num}回 練習スケジュール（{WEEK_RANGE_STR}）")
-    st.caption("確定したスケジュールの確認と、PNG画像の生成・ダウンロードができます。")
+    st.caption(
+        f"※最大{MAX_SLOTS_PER_BAND}コマ上限 ／ 連続コマ優先 ／ 全員＞過半数 ／ 累計が少ないバンド優先"
+    )
 
     if not band_names:
         st.info("まずは「🎸 バンド管理」タブからバンド名と人数を追加してください。")
     else:
+        if st.button("🔄 条件を考慮して自動割り振り", use_container_width=True):
+            band_status = evaluate_band_slots(bands_dict, member_votes)
+            counts = {b: 0 for b in band_names}
+            assigned_band_map = {}
+            slot_results = {}
+
+            sorted_slots = sorted(
+                ACTIVE_SLOTS,
+                key=lambda s: (
+                    sum(1 for b in band_names if band_status[b][s] == "full") == 0,
+                    sum(1 for b in band_names if band_status[b][s] == "full"),
+                    sum(1 for b in band_names if band_status[b][s] == "majority"),
+                ),
+            )
+
+            for slot in sorted_slots:
+                day, period = slot.split(" ")
+                p_idx = PERIODS.index(period)
+                full_bands = [
+                    b for b in band_names
+                    if band_status[b][slot] == "full" and counts[b] < MAX_SLOTS_PER_BAND
+                ]
+                maj_bands = [
+                    b for b in band_names
+                    if band_status[b][slot] == "majority" and counts[b] < MAX_SLOTS_PER_BAND
+                ]
+                if full_bands:
+                    target_bands, suffix = full_bands, ""
+                elif maj_bands:
+                    target_bands, suffix = maj_bands, "(過半数)"
+                else:
+                    target_bands, suffix = [], ""
+
+                if target_bands:
+                    consec_bands = [
+                        b for b in target_bands
+                        if is_consecutive_for_band(b, day, p_idx, assigned_band_map, band_status)
+                    ]
+                    pool = consec_bands if consec_bands else target_bands
+                    min_score = min(
+                        (counts[b], total_stats.get(b, 0)) for b in pool
+                    )
+                    candidates = [
+                        b for b in pool
+                        if (counts[b], total_stats.get(b, 0)) == min_score
+                    ]
+                    chosen = random.choice(candidates)
+                    counts[chosen] += 1
+                    assigned_band_map[slot] = chosen
+                    slot_results[slot] = f"{chosen}{suffix}"
+                else:
+                    slot_results[slot] = "ー"
+
+            new_records = [
+                {
+                    "曜日": s.split(" ")[0],
+                    "コマ": s.split(" ")[1],
+                    "担当バンド": slot_results[s],
+                }
+                for s in ACTIVE_SLOTS
+            ]
+            save_schedule(new_records)
+            st.session_state.pop("sched_img_bytes", None)
+            st.success("累計練習数と希望条件を考慮して割り振り、スプレッドシートに保存しました！")
+            st.rerun()
+
         if schedule_records:
             df = pd.DataFrame(schedule_records)
             df = df.drop_duplicates(subset=["曜日", "コマ"], keep="last")
@@ -498,6 +565,7 @@ with tab2:
                             member_votes[selected_band].pop(target_key, None)
                         save_votes(member_votes)
                         st.session_state["last_vote_msg"] = f"【{selected_band}】代表一括エントリーを登録しました！"
+                        st.session_state["band_select_key"] = st.session_state.get("band_select_key", 0) + 1
                         st.rerun()
             else:
 
@@ -535,6 +603,7 @@ with tab2:
                                 f"【{selected_band}】{clean_member}さんの予定（計{len(selected_slots)}コマ）を登録しました！"
                             )
                             st.session_state["name_input_key"] += 1
+                            st.session_state["band_select_key"] = st.session_state.get("band_select_key", 0) + 1
                             st.rerun()
 
     # ==========================================
@@ -606,74 +675,6 @@ with tab4:
                 st.session_state["admin_unlocked"] = False
                 st.rerun()
 
-        st.write("**🎲 シフト抽選の実行**")
-        if st.button("🔄 条件を考慮して自動割り振り", use_container_width=True):
-            band_status = evaluate_band_slots(bands_dict, member_votes)
-            counts = {b: 0 for b in band_names}
-            assigned_band_map = {}
-            slot_results = {}
-
-            sorted_slots = sorted(
-                ACTIVE_SLOTS,
-                key=lambda s: (
-                    sum(1 for b in band_names if band_status[b][s] == "full") == 0,
-                    sum(1 for b in band_names if band_status[b][s] == "full"),
-                    sum(1 for b in band_names if band_status[b][s] == "majority"),
-                ),
-            )
-
-            for slot in sorted_slots:
-                day, period = slot.split(" ")
-                p_idx = PERIODS.index(period)
-                full_bands = [
-                    b for b in band_names
-                    if band_status[b][slot] == "full" and counts[b] < MAX_SLOTS_PER_BAND
-                ]
-                maj_bands = [
-                    b for b in band_names
-                    if band_status[b][slot] == "majority" and counts[b] < MAX_SLOTS_PER_BAND
-                ]
-                if full_bands:
-                    target_bands, suffix = full_bands, ""
-                elif maj_bands:
-                    target_bands, suffix = maj_bands, "(過半数)"
-                else:
-                    target_bands, suffix = [], ""
-
-                if target_bands:
-                    consec_bands = [
-                        b for b in target_bands
-                        if is_consecutive_for_band(b, day, p_idx, assigned_band_map, band_status)
-                    ]
-                    pool = consec_bands if consec_bands else target_bands
-                    min_score = min(
-                        (counts[b], total_stats.get(b, 0)) for b in pool
-                    )
-                    candidates = [
-                        b for b in pool
-                        if (counts[b], total_stats.get(b, 0)) == min_score
-                    ]
-                    chosen = random.choice(candidates)
-                    counts[chosen] += 1
-                    assigned_band_map[slot] = chosen
-                    slot_results[slot] = f"{chosen}{suffix}"
-                else:
-                    slot_results[slot] = "ー"
-
-            new_records = [
-                {
-                    "曜日": s.split(" ")[0],
-                    "コマ": s.split(" ")[1],
-                    "担当バンド": slot_results[s],
-                }
-                for s in ACTIVE_SLOTS
-            ]
-            save_schedule(new_records)
-            st.session_state.pop("sched_img_bytes", None)
-            st.success("累計練習数と希望条件を考慮して割り振り、スプレッドシートに保存しました！")
-            st.rerun()
-
-        st.divider()
         st.write("**📊 累計練習コマ数統計**")
         if not band_names:
             st.info("バンドが登録されていません。")
