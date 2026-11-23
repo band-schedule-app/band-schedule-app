@@ -603,7 +603,6 @@ with tab2:
                                 f"【{selected_band}】{clean_member}さんの予定（計{len(selected_slots)}コマ）を登録しました！"
                             )
                             st.session_state["name_input_key"] += 1
-                            st.session_state["band_select_key"] = st.session_state.get("band_select_key", 0) + 1
                             st.rerun()
 
     # ==========================================
