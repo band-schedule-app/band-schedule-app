@@ -393,6 +393,30 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # ==========================================
 # タブ1：シフト確認・均等割り振り
 # ==========================================
+def evaluate_band_slots(bands_dict, member_votes):
+    status = {}
+    for b, total_m in bands_dict.items():
+        status[b] = {}
+        b_votes = member_votes.get(b, {})
+        rep_full = b_votes.get("__BAND_FULL__", [])
+        rep_part = b_votes.get("__BAND_PARTIAL__", [])
+        if isinstance(rep_full, str):
+            rep_full = [s.strip() for s in rep_full.split(",") if s.strip()]
+        if isinstance(rep_part, str):
+            rep_part = [s.strip() for s in rep_part.split(",") if s.strip()]
+        for slot in ACTIVE_SLOTS:
+            attended = sum(
+                1 for m, slots in b_votes.items()
+                if m not in ("__BAND_FULL__", "__BAND_PARTIAL__") and slot in slots
+            )
+            if (slot in rep_full) or (total_m > 0 and attended >= total_m):
+                status[b][slot] = "full"
+            elif (slot in rep_part) or (total_m > 0 and attended > total_m / 2):
+                status[b][slot] = "majority"
+            else:
+                status[b][slot] = "none"
+    return status
+
 with tab1:
     st.subheader(f"第{round_num}回 練習スケジュール（{WEEK_RANGE_STR}）")
     st.caption(
@@ -525,9 +549,7 @@ with tab1:
 # ==========================================
 with tab2:
     st.subheader("個人スケジュール投票")
-    st.caption(f"対象週：**{WEEK_RANGE_STR}**（第{round_num}回）")
-
-    if st.session_state["last_vote_msg"]:
+    if st.session_state.get("last_vote_msg"):
         st.success(st.session_state["last_vote_msg"])
         st.session_state["last_vote_msg"] = ""
 
@@ -535,18 +557,25 @@ with tab2:
         st.info("先に「🎸 バンド管理」タブからバンドを追加してください。")
     else:
         PLACEHOLDER = "ーー バンドを選択してください ーー"
-        selected_band = st.selectbox(
-            "1. 自分のバンドを選択", [PLACEHOLDER] + band_names, index=0
-        )
+        b_key = f"band_sel_{st.session_state.get('band_select_key', 0)}"
+        selected_band = st.selectbox("1. 自分のバンドを選択", [PLACEHOLDER] + band_names, index=0, key=b_key)
+
         if selected_band == PLACEHOLDER:
             st.warning("👆 まず自分のバンドを選択してください。")
         else:
             total_members = bands_dict[selected_band]
-            b_votes = member_votes.get(selected_band, {})
+            b_votes = member_votes.setdefault(selected_band, {})
             voted_members = [m for m in b_votes.keys() if m not in ("__BAND_FULL__", "__BAND_PARTIAL__")]
+            rep_full_list = b_votes.get("__BAND_FULL__", [])
+            rep_part_list = b_votes.get("__BAND_PARTIAL__", [])
+
+            rep_status_txt = ""
+            if rep_full_list or rep_part_list:
+                rep_status_txt = f"\n\n🎸 代表一括エントリー：全員揃う {len(rep_full_list)}コマ ／ 過半数・一部欠席 {len(rep_part_list)}コマ"
+
             st.info(
                 f"📊 **【{selected_band}】の投票状況：{len(voted_members)} / {total_members}人 完了**\n\n"
-                f"投票済み：{', '.join(voted_members) if voted_members else 'まだいません'}"
+                f"投票済み：{', '.join(voted_members) if voted_members else 'まだいません'}{rep_status_txt}"
             )
 
             vote_mode = st.radio(
@@ -565,7 +594,7 @@ with tab2:
                 )
                 target_key = "__BAND_FULL__" if "全員揃う" in rep_level else "__BAND_PARTIAL__"
                 existing_rep = b_votes.get(target_key, [])
-                with st.form("band_rep_vote_form"):
+                with st.form(f"band_rep_vote_form_{selected_band}_{target_key}"):
                     st.write(f"**3. 【{selected_band}】としてエントリーするコマにチェック**")
                     selected_rep_slots = []
                     for day in ACTIVE_DAYS:
@@ -576,54 +605,38 @@ with tab2:
                                     selected_rep_slots.append(slot_name)
                     if st.form_submit_button("🎸 バンド代表として一括登録する", use_container_width=True):
                         if selected_rep_slots:
-                            member_votes[selected_band][target_key] = selected_rep_slots
+                            member_votes[selected_band][target_key] = list(selected_rep_slots)
                         else:
                             member_votes[selected_band].pop(target_key, None)
                         save_votes(member_votes)
-                        st.session_state["last_vote_msg"] = f"【{selected_band}】代表一括エントリーを登録しました！"
+                        st.session_state["last_vote_msg"] = f"【{selected_band}】代表一括エントリー（計{len(selected_rep_slots)}コマ）を登録しました！"
                         st.session_state["band_select_key"] = st.session_state.get("band_select_key", 0) + 1
                         st.rerun()
             else:
-
-
                 member_name = st.text_input(
                     "2. 自分の名前を入力（例：田中）",
-                    key=f"member_name_input_{st.session_state['name_input_key']}",
+                    key=f"member_name_input_{st.session_state.get('name_input_key', 0)}"
                 )
                 clean_member = member_name.strip()
-
                 if clean_member:
                     existing_slots = b_votes.get(clean_member, [])
                     with st.form("member_vote_form"):
                         st.write(f"**3. {clean_member}さんが参加できるコマにチェック**")
                         selected_slots = []
                         for day in ACTIVE_DAYS:
-                            with st.expander(
-                                f"📌 {DAY_LABELS[day]}の参加可能コマ",
-                                expanded=(day == ACTIVE_DAYS[0]),
-                            ):
+                            with st.expander(f"📌 {DAY_LABELS[day]}の参加可能コマ", expanded=(day == ACTIVE_DAYS[0])):
                                 for period in PERIODS:
                                     slot_name = f"{day} {period}"
-                                    if st.checkbox(
-                                        period,
-                                        value=(slot_name in existing_slots),
-                                        key=f"{selected_band}_{clean_member}_{slot_name}",
-                                    ):
+                                    if st.checkbox(period, value=(slot_name in existing_slots), key=f"{selected_band}_{clean_member}_{slot_name}"):
                                         selected_slots.append(slot_name)
-
                         if st.form_submit_button("🗳️ この内容で投票を送信する", use_container_width=True):
-                            updated_votes = {k: dict(v) for k, v in member_votes.items()}
-                            updated_votes.setdefault(selected_band, {})[clean_member] = selected_slots
-                            save_votes(updated_votes)
-                            st.session_state["last_vote_msg"] = (
-                                f"【{selected_band}】{clean_member}さんの予定（計{len(selected_slots)}コマ）を登録しました！"
-                            )
-                            st.session_state["name_input_key"] += 1
+                            member_votes[selected_band][clean_member] = list(selected_slots)
+                            save_votes(member_votes)
+                            st.session_state["last_vote_msg"] = f"【{selected_band}】{clean_member}さんの予定（計{len(selected_slots)}コマ）を登録しました！"
+                            st.session_state["name_input_key"] = st.session_state.get("name_input_key", 0) + 1
+                            st.session_state["band_select_key"] = st.session_state.get("band_select_key", 0) + 1
                             st.rerun()
 
-    # ==========================================
-    # タブ3：バンド管理
-    # ==========================================
 with tab3:
     st.subheader("バンドの追加・人数設定")
     with st.form("add_band_form", clear_on_submit=True):
